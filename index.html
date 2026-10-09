@@ -186,6 +186,8 @@ const DEFAULT_MENU=[
 let S={menu:DEFAULT_MENU,tables:[],cur:null,cat:'bebida'};
 try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.menu&&s.tables)S=s;}catch(e){}
 S.menu.forEach(p=>{if(p.sec==='Pizzas'&&!p.price)p.price=16;});
+// Apartado Menú (arriba del todo en Comida); se añade también a cartas ya guardadas
+if(!S.menu.some(p=>p.id==='menu1')){const i=S.menu.findIndex(p=>p.cat==='comida');S.menu.splice(i<0?S.menu.length:i,0,{id:'menu1',cat:'comida',sec:'Menú',name:'Menú diario',price:14},{id:'menu2',cat:'comida',sec:'Menú',name:'Menú fin de semana',price:16});}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 const eur=n=>n.toFixed(2).replace('.',',')+' €';
 const $=id=>document.getElementById(id);
