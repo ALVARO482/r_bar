@@ -36,8 +36,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline
 .ghost{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-weight:600;flex:0 0 auto}
 input{min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit}
 /* pantalla de mesas */
-.open{display:flex;gap:8px;margin-top:14px}
-.open input{flex:1;font-size:18px}
+.open{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.open input{font-size:18px}
+.open button{grid-column:1/-1}
 .primary{background:var(--accent);color:var(--accent-ink);border-radius:12px;padding:12px 16px;font-weight:600;font-size:17px;flex:0 0 auto}
 .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .tcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:84px}
@@ -122,7 +123,8 @@ input{min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);b
   <section id="vTables">
     <header><h1>R_BAR</h1><span style="display:flex;gap:8px;align-items:center"><button class="mchip" id="modeChip">Solo</button><button class="ghost" id="toMenu">Carta</button></span></header>
     <form class="open" id="openForm">
-      <input id="tableName" placeholder="Nombre de la mesa (ej. Terraza 3)" autocomplete="off" aria-label="Nombre de la mesa">
+      <input id="tableName" placeholder="Mesa" autocomplete="off" aria-label="Nombre de la mesa">
+      <input id="tablePax" type="number" inputmode="numeric" min="1" max="99" placeholder="Personas" aria-label="Número de personas">
       <button class="primary" type="submit">Abrir</button>
     </form>
     <h2>Mesas abiertas</h2>
@@ -224,13 +226,13 @@ function mqttDb(){return new Promise(res=>{
   const pub=(t,v)=>new Promise((ok,ko)=>client.publish(t,v==null?'':JSON.stringify(v),{qos:1,retain:true},e=>e?ko(e):ok()));
   const api={collection(path){const base='rbar1/'+path.split('/')[1];return {
     doc:id=>({
-      set:d=>pub(base+'/t/'+id+'/meta',{name:d.name,created:d.created}),
+      set:d=>pub(base+'/t/'+id+'/meta',{name:d.name,created:d.created,pax:d.pax||0}),
       update:d=>Promise.all(Object.entries(d.lines||{}).map(([k,v])=>pub(base+'/t/'+id+'/k/'+k,v))),
       delete:async()=>{const t=state[id];const ks=t?Object.keys(t.lines):[];await pub(base+'/t/'+id+'/meta',null);await Promise.all(ks.map(k=>pub(base+'/t/'+id+'/k/'+k,null)));}
     }),
     onSnapshot(cb,err){
       let timer;
-      const emit=()=>{clearTimeout(timer);timer=setTimeout(()=>cb({docs:Object.entries(state).filter(([,t])=>t.meta).map(([id,t])=>({id,exists:true,data:()=>({name:t.meta.name,created:t.meta.created,lines:t.lines})}))}),60);};
+      const emit=()=>{clearTimeout(timer);timer=setTimeout(()=>cb({docs:Object.entries(state).filter(([,t])=>t.meta).map(([id,t])=>({id,exists:true,data:()=>({name:t.meta.name,created:t.meta.created,pax:t.meta.pax||0,lines:t.lines})}))}),60);};
       client.on('message',(topic,buf)=>{if(!topic.startsWith(base+'/t/'))return;const p=topic.slice(base.length+3).split('/');const id=p[0];
         const s=buf.toString();let v=null;try{v=s?JSON.parse(s):null}catch(e){}
         const t=state[id]=state[id]||{meta:null,lines:{}};
@@ -249,7 +251,7 @@ function subscribe(){
     G=snap.docs.filter(d=>d.exists).map(d=>{const b=d.data()||{},items={},taps={};
       for(const [k,v] of Object.entries(b.lines||{})){if(!v)continue;items[v]=(items[v]||0)+1;(taps[v]=taps[v]||[]).push(k);}
       for(const v in taps)taps[v].sort();
-      return {id:d.id,name:b.name||'Mesa',created:b.created||0,items,taps};}).sort((a,b)=>a.created-b.created);
+      return {id:d.id,name:b.name||'Mesa',created:b.created||0,pax:b.pax||0,items,taps};}).sort((a,b)=>a.created-b.created);
     if(view==='table'&&!curT()){show('tables');toast('Esta mesa ya la ha cobrado un compañero');}else render();
   },()=>toast('Se ha perdido la conexión con el grupo. Recarga la página.'));
 }
@@ -272,12 +274,12 @@ function show(v){view=v;
 function render(){
   if(view==='tables'){
     const mc=$('modeChip');mc.textContent=mode==='group'?'Grupo '+code:'Solo';mc.classList.toggle('grp',mode==='group');
-    $('tables').innerHTML=T().length?T().map(t=>`<button class="tcard" data-open="${t.id}"><b>${esc(t.name)}</b><span>${eur(sum(t))}</span><small>${count(t)} cosas</small></button>`).join('')
+    $('tables').innerHTML=T().length?T().map(t=>`<button class="tcard" data-open="${t.id}"><b>${esc(t.name)}</b><span>${eur(sum(t))}</span><small>${t.pax?t.pax+' pers. · ':''}${count(t)} cosas</small></button>`).join('')
       :`<div class="empty">${mode==='group'&&!unsub?'Conectando…':'No hay mesas abiertas. Escribe un nombre arriba y toca Abrir.'}</div>`;
   }
   if(view==='table'){
     const t=curT();if(!t)return show('tables');
-    $('tTitle').textContent=t.name;
+    $('tTitle').textContent=t.name+(t.pax?' · '+t.pax+' pers.':'');
     document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.c===S.cat));
     const ss=secs(S.cat);
     $('chips').innerHTML=ss.length>1?ss.map(s=>`<button data-go="${secId(s)}">${esc(s)}</button>`).join(''):'';
@@ -319,9 +321,10 @@ function toast(msg){const el=$('toast');el.textContent=msg;el.hidden=false;clear
 $('openForm').addEventListener('submit',e=>{
   e.preventDefault();
   const name=$('tableName').value.trim()||('Mesa '+(T().length+1));
-  const t={id:rid('t'),name,created:Date.now(),items:{},taps:{}};T().push(t);S.cur=t.id;S.cat='bebida';
-  if(mode==='group')q(t.id,()=>gcol().doc(t.id).set({name,created:t.created,lines:{}}));
-  $('tableName').value='';save();show('table');
+  const pax=Math.max(0,Math.min(99,parseInt($('tablePax').value,10)||0));
+  const t={id:rid('t'),name,pax,created:Date.now(),items:{},taps:{}};T().push(t);S.cur=t.id;S.cat='bebida';
+  if(mode==='group')q(t.id,()=>gcol().doc(t.id).set({name,pax,created:t.created,lines:{}}));
+  $('tableName').value='';$('tablePax').value='';save();show('table');
 });
 $('codeForm').addEventListener('submit',e=>{e.preventDefault();$('codeErr').hidden=true;enterGroup($('codeIn').value);});
 function addOne(t,pid){t.items[pid]=(t.items[pid]||0)+1;
