@@ -36,9 +36,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline
 .ghost{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-weight:600;flex:0 0 auto}
 input{min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit}
 /* pantalla de mesas */
-.open{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
-.open input{font-size:18px}
-.open button{grid-column:1/-1}
+.open{display:flex;gap:8px}
+.open input{font-size:18px;flex:1;min-width:0}
 .primary{background:var(--accent);color:var(--accent-ink);border-radius:12px;padding:12px 16px;font-weight:600;font-size:17px;flex:0 0 auto}
 .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .tcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:84px}
@@ -122,12 +121,15 @@ input{min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);b
   <!-- Pantalla 1: mesas -->
   <section id="vTables">
     <header><h1>R_BAR</h1><span style="display:flex;gap:8px;align-items:center"><button class="mchip" id="modeChip">Solo</button><button class="ghost" id="toMenu">Carta</button></span></header>
+    <div class="seg" role="tablist">
+      <button data-l="mesa" role="tab">Mesas</button>
+      <button data-l="persona" role="tab">Personas</button>
+    </div>
     <form class="open" id="openForm">
-      <input id="tableName" placeholder="Mesa" autocomplete="off" aria-label="Nombre de la mesa">
-      <input id="tablePax" type="number" inputmode="numeric" min="1" max="99" placeholder="Personas" aria-label="Número de personas">
+      <input id="tableName" placeholder="Mesa" autocomplete="off" aria-label="Nombre">
       <button class="primary" type="submit">Abrir</button>
     </form>
-    <h2>Mesas abiertas</h2>
+    <h2 id="listTitle">Mesas abiertas</h2>
     <div class="tables" id="tables"></div>
   </section>
 
@@ -195,6 +197,7 @@ if(!S.menu.some(p=>p.id==='agua1')){const i=S.menu.findIndex(p=>p.sec==='Refresc
  if(a&&!S.aguaA1){a.price=1;S.aguaA1=1;}
  if(!S.menu.some(p=>p.id==='agua2')){const i=S.menu.indexOf(a);S.menu.splice(i<0?S.menu.length:i+1,0,{id:'agua2',cat:'bebida',sec:'Refrescos',name:'Agua grande',price:2});}}
 if(!S.menu.some(p=>p.id==='menu1')){const i=S.menu.findIndex(p=>p.cat==='comida');S.menu.splice(i<0?S.menu.length:i,0,{id:'menu1',cat:'comida',sec:'Menú',name:'Menú diario',price:14},{id:'menu2',cat:'comida',sec:'Menú',name:'Menú fin de semana',price:16});}
+if(S.lst!=='persona')S.lst='mesa';
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 const eur=n=>n.toFixed(2).replace('.',',')+' €';
 const $=id=>document.getElementById(id);
@@ -226,13 +229,13 @@ function mqttDb(){return new Promise(res=>{
   const pub=(t,v)=>new Promise((ok,ko)=>client.publish(t,v==null?'':JSON.stringify(v),{qos:1,retain:true},e=>e?ko(e):ok()));
   const api={collection(path){const base='rbar1/'+path.split('/')[1];return {
     doc:id=>({
-      set:d=>pub(base+'/t/'+id+'/meta',{name:d.name,created:d.created,pax:d.pax||0}),
+      set:d=>pub(base+'/t/'+id+'/meta',{name:d.name,created:d.created,kind:d.kind||'mesa'}),
       update:d=>Promise.all(Object.entries(d.lines||{}).map(([k,v])=>pub(base+'/t/'+id+'/k/'+k,v))),
       delete:async()=>{const t=state[id];const ks=t?Object.keys(t.lines):[];await pub(base+'/t/'+id+'/meta',null);await Promise.all(ks.map(k=>pub(base+'/t/'+id+'/k/'+k,null)));}
     }),
     onSnapshot(cb,err){
       let timer;
-      const emit=()=>{clearTimeout(timer);timer=setTimeout(()=>cb({docs:Object.entries(state).filter(([,t])=>t.meta).map(([id,t])=>({id,exists:true,data:()=>({name:t.meta.name,created:t.meta.created,pax:t.meta.pax||0,lines:t.lines})}))}),60);};
+      const emit=()=>{clearTimeout(timer);timer=setTimeout(()=>cb({docs:Object.entries(state).filter(([,t])=>t.meta).map(([id,t])=>({id,exists:true,data:()=>({name:t.meta.name,created:t.meta.created,kind:t.meta.kind||'mesa',lines:t.lines})}))}),60);};
       client.on('message',(topic,buf)=>{if(!topic.startsWith(base+'/t/'))return;const p=topic.slice(base.length+3).split('/');const id=p[0];
         const s=buf.toString();let v=null;try{v=s?JSON.parse(s):null}catch(e){}
         const t=state[id]=state[id]||{meta:null,lines:{}};
@@ -251,7 +254,7 @@ function subscribe(){
     G=snap.docs.filter(d=>d.exists).map(d=>{const b=d.data()||{},items={},taps={};
       for(const [k,v] of Object.entries(b.lines||{})){if(!v)continue;items[v]=(items[v]||0)+1;(taps[v]=taps[v]||[]).push(k);}
       for(const v in taps)taps[v].sort();
-      return {id:d.id,name:b.name||'Mesa',created:b.created||0,pax:b.pax||0,items,taps};}).sort((a,b)=>a.created-b.created);
+      return {id:d.id,name:b.name||'Mesa',created:b.created||0,kind:b.kind||'mesa',items,taps};}).sort((a,b)=>a.created-b.created);
     if(view==='table'&&!curT()){show('tables');toast('Esta mesa ya la ha cobrado un compañero');}else render();
   },()=>toast('Se ha perdido la conexión con el grupo. Recarga la página.'));
 }
@@ -274,13 +277,16 @@ function show(v){view=v;
 function render(){
   if(view==='tables'){
     const mc=$('modeChip');mc.textContent=mode==='group'?'Grupo '+code:'Solo';mc.classList.toggle('grp',mode==='group');
-    $('tables').innerHTML=T().length?T().map(t=>`<button class="tcard" data-open="${t.id}"><b>${esc(t.name)}</b><span>${eur(sum(t))}</span><small>${t.pax?t.pax+' pers. · ':''}${count(t)} cosas</small></button>`).join('')
-      :`<div class="empty">${mode==='group'&&!unsub?'Conectando…':'No hay mesas abiertas. Escribe un nombre arriba y toca Abrir.'}</div>`;
+    const per=S.lst==='persona',L=T().filter(t=>(t.kind||'mesa')===S.lst);
+    document.querySelectorAll('#vTables .seg button').forEach(b=>b.classList.toggle('on',b.dataset.l===S.lst));
+    $('tableName').placeholder=per?'Persona':'Mesa';$('listTitle').textContent=per?'Personas abiertas':'Mesas abiertas';
+    $('tables').innerHTML=L.length?L.map(t=>`<button class="tcard" data-open="${t.id}"><b>${esc(t.name)}</b><span>${eur(sum(t))}</span><small>${count(t)} cosas</small></button>`).join('')
+      :`<div class="empty">${mode==='group'&&!unsub?'Conectando…':(per?'No hay personas abiertas.':'No hay mesas abiertas.')+' Escribe un nombre arriba y toca Abrir.'}</div>`;
   }
   if(view==='table'){
     const t=curT();if(!t)return show('tables');
-    $('tTitle').textContent=t.name+(t.pax?' · '+t.pax+' pers.':'');
-    document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.c===S.cat));
+    $('tTitle').textContent=t.name;$('back').textContent=(t.kind||'mesa')==='persona'?'← Personas':'← Mesas';
+    document.querySelectorAll('#vTable .seg button').forEach(b=>b.classList.toggle('on',b.dataset.c===S.cat));
     const ss=secs(S.cat);
     $('chips').innerHTML=ss.length>1?ss.map(s=>`<button data-go="${secId(s)}">${esc(s)}</button>`).join(''):'';
     $('chips').hidden=ss.length<2;
@@ -320,11 +326,11 @@ function toast(msg){const el=$('toast');el.textContent=msg;el.hidden=false;clear
 
 $('openForm').addEventListener('submit',e=>{
   e.preventDefault();
-  const name=$('tableName').value.trim()||('Mesa '+(T().length+1));
-  const pax=Math.max(0,Math.min(99,parseInt($('tablePax').value,10)||0));
-  const t={id:rid('t'),name,pax,created:Date.now(),items:{},taps:{}};T().push(t);S.cur=t.id;S.cat='bebida';
-  if(mode==='group')q(t.id,()=>gcol().doc(t.id).set({name,pax,created:t.created,lines:{}}));
-  $('tableName').value='';$('tablePax').value='';save();show('table');
+  const kind=S.lst,n=T().filter(t=>(t.kind||'mesa')===kind).length+1;
+  const name=$('tableName').value.trim()||((kind==='persona'?'Persona ':'Mesa ')+n);
+  const t={id:rid('t'),name,kind,created:Date.now(),items:{},taps:{}};T().push(t);S.cur=t.id;S.cat='bebida';
+  if(mode==='group')q(t.id,()=>gcol().doc(t.id).set({name,kind,created:t.created,lines:{}}));
+  $('tableName').value='';save();show('table');
 });
 $('codeForm').addEventListener('submit',e=>{e.preventDefault();$('codeErr').hidden=true;enterGroup($('codeIn').value);});
 function addOne(t,pid){t.items[pid]=(t.items[pid]||0)+1;
@@ -342,6 +348,7 @@ document.addEventListener('click',e=>{
   if(b.id==='toMenu')return show('menu');
   if(b.id==='menuDone')return show('tables');
   if(b.dataset.go){const el=$(b.dataset.go);if(el)el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});return;}
+  if(b.dataset.l){S.lst=b.dataset.l;save();return render();}
   if(b.dataset.c){S.cat=b.dataset.c;window.scrollTo(0,0);}
   else if(b.dataset.p){addOne(t,b.dataset.p);try{navigator.vibrate&&navigator.vibrate(15)}catch(_){}}
   else if(b.dataset.a){addOne(t,b.dataset.a);}
