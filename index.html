@@ -201,6 +201,9 @@ if(!S.menu.some(p=>p.id==='agua1')){const i=S.menu.findIndex(p=>p.sec==='Refresc
 {const a=S.menu.find(p=>p.id==='agua1');if(a&&a.name==='Agua')a.name='Agua pequeña';
  if(a&&!S.aguaA1){a.price=1;S.aguaA1=1;}
  if(!S.menu.some(p=>p.id==='agua2')){const i=S.menu.indexOf(a);S.menu.splice(i<0?S.menu.length:i+1,0,{id:'agua2',cat:'bebida',sec:'Refrescos',name:'Agua grande',price:2});}}
+// Copa de vino y Salobreña al final de Refrescos
+for(const it of [{id:'vino1',cat:'bebida',sec:'Refrescos',name:'Copa de vino',price:2},{id:'salo1',cat:'bebida',sec:'Refrescos',name:'Salobreña',price:1.5}])
+ if(!S.menu.some(p=>p.id===it.id)){let i=-1;S.menu.forEach((p,j)=>{if(p.sec==='Refrescos')i=j;});S.menu.splice(i<0?S.menu.length:i+1,0,it);}
 if(!S.menu.some(p=>p.id==='menu1')){const i=S.menu.findIndex(p=>p.cat==='comida');S.menu.splice(i<0?S.menu.length:i,0,{id:'menu1',cat:'comida',sec:'Menú',name:'Menú diario',price:14},{id:'menu2',cat:'comida',sec:'Menú',name:'Menú fin de semana',price:16});}
 if(S.lst!=='persona')S.lst='mesa';
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
