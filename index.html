@@ -142,6 +142,11 @@ input{min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);b
     </div>
     <nav class="chips" id="chips"></nav>
     <div class="grid" id="grid"></div>
+    <h3 class="sh" id="s-Varios">Varios</h3>
+    <form class="open" id="varForm">
+      <input id="varPrice" type="text" inputmode="decimal" placeholder="Precio €" autocomplete="off" aria-label="Precio de varios">
+      <button class="primary" type="submit">Añadir</button>
+    </form>
   </section>
 
   <!-- Pantalla 3: carta -->
@@ -204,7 +209,8 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let view='tables', confirmPay=false, payTimer;
 
-const prod=id=>S.menu.find(m=>m.id===id);
+// Varios: precio libre que no está en la carta. El id lleva la categoría y el precio en céntimos (vb:250 = bebida 2,50 €)
+const prod=id=>{const v=/^v([bc]):(\d+)$/.exec(id);return v?{id,cat:v[1]==='b'?'bebida':'comida',sec:'Varios',name:'Varios '+eur(+v[2]/100),price:+v[2]/100}:S.menu.find(m=>m.id===id);};
 const secs=cat=>[...new Set(S.menu.filter(p=>p.cat===cat).map(p=>p.sec||'Otros'))];
 const secId=s=>'s-'+s.replace(/\W+/g,'');
 function sum(t,cat){let s=0;for(const id in t.items){const p=prod(id);if(p&&(!cat||p.cat===cat))s+=p.price*t.items[id];}return s;}
@@ -288,8 +294,7 @@ function render(){
     $('tTitle').textContent=t.name;$('back').textContent=(t.kind||'mesa')==='persona'?'← Personas':'← Mesas';
     document.querySelectorAll('#vTable .seg button').forEach(b=>b.classList.toggle('on',b.dataset.c===S.cat));
     const ss=secs(S.cat);
-    $('chips').innerHTML=ss.length>1?ss.map(s=>`<button data-go="${secId(s)}">${esc(s)}</button>`).join(''):'';
-    $('chips').hidden=ss.length<2;
+    $('chips').innerHTML=[...ss,'Varios'].map(s=>`<button data-go="${secId(s)}">${esc(s)}</button>`).join('');
     $('grid').className='grid '+S.cat;
     $('grid').innerHTML=ss.map(s=>`<h3 class="sh" id="${secId(s)}">${esc(s)}</h3>`+S.menu.filter(p=>p.cat===S.cat&&(p.sec||'Otros')===s).map(p=>{const n=t.items[p.id]||0;
       return `<button class="prod${p.price?'':' np'}" data-p="${p.id}">${n?`<i class="n">${n}</i>`:''}<b>${esc(p.name)}</b><span>${p.price?eur(p.price):'sin precio'}</span></button>`}).join('')).join('')
@@ -331,6 +336,12 @@ $('openForm').addEventListener('submit',e=>{
   const t={id:rid('t'),name,kind,created:Date.now(),items:{},taps:{}};T().push(t);S.cur=t.id;S.cat='bebida';
   if(mode==='group')q(t.id,()=>gcol().doc(t.id).set({name,kind,created:t.created,lines:{}}));
   $('tableName').value='';save();show('table');
+});
+$('varForm').addEventListener('submit',e=>{
+  e.preventDefault();const t=curT();if(!t)return;
+  const c=Math.round(parseFloat($('varPrice').value.replace(',','.'))*100);
+  if(!(c>0&&c<100000)){toast('Escribe un precio, por ejemplo 3,50');return;}
+  addOne(t,'v'+(S.cat==='bebida'?'b':'c')+':'+c);$('varPrice').value='';$('varPrice').blur();save();render();toast('Varios '+eur(c/100)+' añadido');
 });
 $('codeForm').addEventListener('submit',e=>{e.preventDefault();$('codeErr').hidden=true;enterGroup($('codeIn').value);});
 function addOne(t,pid){t.items[pid]=(t.items[pid]||0)+1;
